@@ -38,8 +38,11 @@ class ISHit(object):
         # these are the gene IDs (locus_tags) closest to the IS hit
         self.gene_left = None
         self.gene_right = None
-        # interrupted only becomes true if gene left and right are the same
-        self.interrupted = False
+        # whether the left & right genes are interrupted
+        self.left_interrupted = False
+        self.right_interrupted = False
+        # intragenic only becomes true if gene left and right are the same
+        self.intragenic = False
         # confidence level is either confident, imprecise (*) or unpaired (?)
         self.confidence_level = None
         # x and y coordinates of the hit
@@ -66,11 +69,10 @@ class ISHit(object):
 
         return self
 
-    def determine_interrupted(self):
+    def determine_intragenic(self):
 
         if self.gene_left == self.gene_right:
-            self.interrupted = True
-
+            self.intragenic = True                    
         return self
 
 
@@ -145,6 +147,20 @@ class ISHit(object):
         # add the gene names
         self.gene_left = self.left_feature.qualifiers['locus_tag'][0]
         self.gene_right = self.right_feature.qualifiers['locus_tag'][0]
+
+        # Check gene interruption
+        # Gene is interrupted if its CDS is overlapped with IS
+        # Check for both left & right gene
+        left_gene_region = range(int(min(left_feature.location.start, left_feature.location.end)), int(max(left_feature.location.start, left_feature.location.end)))
+        right_gene_region = range(int(min(right_feature.location.start, right_feature.location.end)), int(max(right_feature.location.start, right_feature.location.end)))
+
+        overlap_left = len(range(max(int(self.x)+1, left_gene_region[0]), min(int(self.y)+1, left_gene_region[-1])+1))
+        overlap_right = len(range(max(int(self.x)+1, right_gene_region[0]), min(int(self.y)+1, right_gene_region[-1])+1))
+
+        if overlap_left:
+            self.left_interrupted = True
+        if overlap_right:
+            self.right_interrupted = True
 
         return self
 
@@ -444,7 +460,7 @@ def write_typing_output(IShits, removedhits, cds_feature_info, rrna_feature_info
 
         # set the header and write it to the output file
         header = ["region", "orientation", "x", "y", "gap", "call", "percent_ID", "percent_cov", "left_gene", "left_description", "left_strand",
-                  "left_distance", "right_gene", "right_description", "right_strand", "right_distance", "gene_interruption"]
+                  "left_distance", "left_interrupted", "right_gene", "right_description", "right_strand", "right_distance", "right_interrupted", "intragenic"]
         out.write('\t'.join(header) + '\n')
 
         # if there are no hits, record this and exit the function
@@ -468,8 +484,8 @@ def write_typing_output(IShits, removedhits, cds_feature_info, rrna_feature_info
                 call_type = call_type + '?'
             # calculate gap distance
             IShit.get_gap_distance()
-            # determine if gene is interrupted or not
-            IShit.determine_interrupted()
+            # determine if gene is intragenic or not
+            IShit.determine_intragenic()
             # get qualifiers for left and right genes
             # TODO: make sure this qualifier call is robust
             if IShit.left_feature.type == 'CDS':
@@ -529,9 +545,9 @@ def write_typing_output(IShits, removedhits, cds_feature_info, rrna_feature_info
             # put together row
             line_list = [region_num, IShit.orientation, str(IShit.x), str(IShit.y), str(IShit.gap),
                          call_type, IShit.per_id, IShit.coverage, IShit.gene_left, left_description,
-                         str(IShit.left_strand), str(IShit.left_distance), IShit.gene_right,
-                         right_description, str(IShit.right_strand), str(IShit.right_distance),
-                         str(IShit.interrupted)]
+                         str(IShit.left_strand), str(IShit.left_distance), str(IShit.left_interrupted), IShit.gene_right,
+                         right_description, str(IShit.right_strand), str(IShit.right_distance), str(IShit.right_interrupted),
+                         str(IShit.intragenic)]
             # write out the information
             out.write('\t'.join(line_list) + '\n')
 
